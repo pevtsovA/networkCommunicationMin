@@ -7,8 +7,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"log"
 	"net/http"
-	"networkCommunicationMinRef/dataBase"
-	"networkCommunicationMinRef/models"
+	"networkCommunicationMin/dataBase"
+	"networkCommunicationMin/models"
 )
 
 var srv = dataBase.Service{}

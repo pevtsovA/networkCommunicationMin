@@ -1,4 +1,4 @@
-module networkCommunicationMinRef
+module networkCommunicationMin
 
 go 1.18
 

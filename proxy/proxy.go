@@ -5,7 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"networkCommunicationMinRef/models"
+	"networkCommunicationMin/models"
 	"time"
 )
 
