@@ -1,4 +1,4 @@
-package dataBase
+package main
 
 import (
 	"encoding/json"
@@ -9,6 +9,10 @@ import (
 	"strconv"
 )
 
+type Service struct {
+	Storage Storage
+}
+
 func (s *Service) Ping(w http.ResponseWriter, r *http.Request) {
 	// Ping - функция проверки соединения с сервером
 	w.WriteHeader(http.StatusOK)
@@ -16,17 +20,23 @@ func (s *Service) Ping(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) GetAll(w http.ResponseWriter, r *http.Request) {
 	// GetAll - функция, которая возвращает данные по всем пользователям
-	if r.Method == "GET" {
-		response := ""
-		for _, user := range s.DataReading() {
-			response += user.ToSting()
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(response))
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	w.WriteHeader(http.StatusBadRequest)
+
+	users, err := s.Storage.GetUsers()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("Method GetAll. Failed to get users: " + err.Error()))
+		return
+	}
+	response := ""
+	for _, user := range users {
+		response += user.ToSting()
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(response))
 }
 
 func (s *Service) GetFriends(w http.ResponseWriter, r *http.Request) {
@@ -35,7 +45,12 @@ func (s *Service) GetFriends(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 		userID, _ := strconv.Atoi(id)
 		response := []models.User{}
-		dataUsers := s.DataReading()
+		dataUsers, err := s.Storage.GetUsers()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Method GetFriends. Failed to get users: " + err.Error()))
+			return
+		}
 
 		if len(dataUsers) > 0 && userID >= models.MinUserID(dataUsers) && userID <= models.MaxUserID(dataUsers) {
 			for _, userID := range dataUsers[userID].Friends {
@@ -72,7 +87,12 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		id := s.DataRecording(u.Name, u.Age, u.Friends)
+		id, err := s.Storage.SaveUser(u.Name, u.Age, u.Friends)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Method Create. Failed to save user: " + err.Error()))
+			return
+		}
 
 		w.WriteHeader(http.StatusCreated)
 		w.Write([]byte("User created with id: " + strconv.Itoa(id) + "; http code: " + strconv.Itoa(http.StatusCreated)))
@@ -98,31 +118,46 @@ func (s *Service) MakeFriends(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(err.Error()))
 			return
 		}
-		dataUsers := s.DataReading()
+		dataUsers, err := s.Storage.GetUsers()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Method MakeFriends. Failed to get users: " + err.Error()))
+			return
+		}
 
-		if len(dataUsers) > 1 && f.Source_id >= models.MinUserID(dataUsers) && f.Source_id <= models.MaxUserID(dataUsers) &&
-			f.Target_id >= models.MinUserID(dataUsers) && f.Target_id <= models.MaxUserID(dataUsers) {
+		if len(dataUsers) > 1 && f.SourceId >= models.MinUserID(dataUsers) && f.SourceId <= models.MaxUserID(dataUsers) &&
+			f.TargetId >= models.MinUserID(dataUsers) && f.TargetId <= models.MaxUserID(dataUsers) {
 			var checkFriend = false
 			for _, value := range dataUsers {
-				if value.ID == f.Source_id {
+				if value.ID == f.SourceId {
 					for _, friendID := range value.Friends {
-						if friendID == int64(f.Target_id) {
+						if friendID == int64(f.TargetId) {
 							checkFriend = true
 						}
 					}
 				}
 			}
 
-			source := dataUsers[f.Source_id]
-			target := dataUsers[f.Target_id]
+			source := dataUsers[f.SourceId]
+			target := dataUsers[f.TargetId]
 			if checkFriend == false {
-				source.Friends = append(source.Friends, int64(f.Target_id))
-				target.Friends = append(target.Friends, int64(f.Source_id))
+				source.Friends = append(source.Friends, int64(f.TargetId))
+				target.Friends = append(target.Friends, int64(f.SourceId))
 				dataUsers[source.ID] = source
 				dataUsers[target.ID] = target
 
-				s.DataUpdating(source.ID, dataUsers[source.ID].Name, dataUsers[source.ID].Age, dataUsers[source.ID].Friends)
-				s.DataUpdating(target.ID, dataUsers[target.ID].Name, dataUsers[target.ID].Age, dataUsers[target.ID].Friends)
+				err = s.Storage.UpdateUser(source.ID, dataUsers[source.ID].Name, dataUsers[source.ID].Age, dataUsers[source.ID].Friends)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte("Method MakeFriends. Failed to update source user: " + err.Error()))
+					return
+				}
+				err = s.Storage.UpdateUser(target.ID, dataUsers[target.ID].Name, dataUsers[target.ID].Age, dataUsers[target.ID].Friends)
+				if err != nil {
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte("Method MakeFriends. Failed to update target user: " + err.Error()))
+					return
+				}
 
 				w.Write([]byte(source.Name + " and " + target.Name + " are now friends" + "; http code: " + strconv.Itoa(http.StatusOK)))
 			} else {
@@ -157,13 +192,23 @@ func (s *Service) UpdateUser(w http.ResponseWriter, r *http.Request) {
 
 		id := chi.URLParam(r, "id")
 		userID, _ := strconv.Atoi(id)
-		dataUsers := s.DataReading()
+		dataUsers, err := s.Storage.GetUsers()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Method UpdateUser. Failed to get user: " + err.Error()))
+			return
+		}
 
 		if len(dataUsers) > 0 && userID >= models.MinUserID(dataUsers) && userID <= models.MaxUserID(dataUsers) {
 			u := dataUsers[userID]
-			u.Age = c.New_age
+			u.Age = c.NewAge
 			dataUsers[userID] = u
-			s.DataUpdating(dataUsers[userID].ID, dataUsers[userID].Name, dataUsers[userID].Age, dataUsers[userID].Friends)
+			err = s.Storage.UpdateUser(dataUsers[userID].ID, dataUsers[userID].Name, dataUsers[userID].Age, dataUsers[userID].Friends)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("Method UpdateUser. Failed to update user: " + err.Error()))
+				return
+			}
 
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("user age updated successfully; http code: " + strconv.Itoa(http.StatusOK)))
@@ -194,8 +239,13 @@ func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(err.Error()))
 			return
 		}
-		dataUsers := s.DataReading()
-		uID := f.Target_id
+		dataUsers, err := s.Storage.GetUsers()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Method Delete. Failed to get users: " + err.Error()))
+			return
+		}
+		uID := f.TargetId
 		remoteUsername := dataUsers[uID].Name
 
 		if len(dataUsers) > 0 && uID >= models.MinUserID(dataUsers) && uID <= models.MaxUserID(dataUsers) {
@@ -205,13 +255,23 @@ func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
 						indexUser := models.FindUser(value.Friends, dataUsers[uID])
 						value.Friends = append((value.Friends)[:indexUser], (value.Friends)[indexUser+1:]...)
 						dataUsers[value.ID] = value
-						s.DataUpdating(dataUsers[value.ID].ID, dataUsers[value.ID].Name, dataUsers[value.ID].Age, dataUsers[value.ID].Friends)
+						err = s.Storage.UpdateUser(dataUsers[value.ID].ID, dataUsers[value.ID].Name, dataUsers[value.ID].Age, dataUsers[value.ID].Friends)
+						if err != nil {
+							w.WriteHeader(http.StatusInternalServerError)
+							w.Write([]byte("Method Delete. Failed to update user: " + err.Error()))
+							return
+						}
 					}
 				}
 			}
 
 			delete(dataUsers, uID)
-			s.DataDeleting(uID)
+			err = s.Storage.DeleteUser(uID)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte("Method Delete. Failed to delete user: " + err.Error()))
+				return
+			}
 
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("remote username: " + remoteUsername + "; http code: " + strconv.Itoa(http.StatusOK)))

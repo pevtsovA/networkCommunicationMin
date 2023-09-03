@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"flag"
+	"fmt"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"log"
@@ -11,19 +12,22 @@ import (
 	"networkCommunicationMin/models"
 )
 
-var srv = dataBase.Service{}
-
 func main() {
 	port := flag.String("port", "8080", "Listen server port")
+	password := flag.String("dbpassword", "", "Database password")
 	flag.Parse()
 
-	connStr := "user=postgres password=******** dbname=socnetworkdb sslmode=disable"
-	db, err := sql.Open("postgres", connStr)
+	connStr := fmt.Sprintf("user=postgres password=%s dbname=socnetworkdb sslmode=disable", *password)
+	dbConnect, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	defer db.Close()
-	srv.DB = db
+	defer dbConnect.Close()
+	srv := Service{
+		Storage: &dataBase.Storage{
+			DB: dbConnect,
+		},
+	}
 
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)

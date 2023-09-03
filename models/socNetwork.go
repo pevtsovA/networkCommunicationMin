@@ -8,10 +8,10 @@ type User struct {
 }
 
 type Friends struct {
-	Source_id int `json:"source_id"`
-	Target_id int `json:"target_id"`
+	SourceId int `json:"source_id"`
+	TargetId int `json:"target_id"`
 }
 
 type ChangeAge struct {
-	New_age int `json:"new_age"`
+	NewAge int `json:"new_age"`
 }

@@ -66,15 +66,14 @@ func HandleProxy(w http.ResponseWriter, r *http.Request) {
 	urlServer = s
 	ms[s] = n + 1
 
-	if r.Method == "GET" {
-		req = getReq()
-	} else if r.Method == "POST" {
-		req = postReq(body)
-	} else if r.Method == "DELETE" {
-		req = deleteReq(body)
-	} else if r.Method == "PUT" {
-		req = putReq(body)
+	if r.Method == http.MethodGet {
+		body = nil
 	}
+	/*if r.Method == "GET" {
+		req = getReq()
+	} else {*/
+	req = makeReq(body, r.Method)
+	//}
 
 	client := http.Client{
 		Timeout: 5 * time.Second,
@@ -121,57 +120,29 @@ func pingServers() {
 	}
 }
 
-func getReq() *http.Request {
-	// getReq - функция get запроса на сервер
-	req, err := http.NewRequest(
-		http.MethodGet,
-		urlServer+url,
-		nil,
-	)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	return req
-}
+func makeReq(body io.Reader, method string) *http.Request {
+	var req *http.Request
+	var err error
 
-func postReq(body io.Reader) *http.Request {
-	// postReq - функция post запроса на сервер
-	req, err := http.NewRequest(
-		http.MethodPost,
-		urlServer+url,
-		body,
-	)
-	if err != nil {
-		log.Fatalln(err)
+	if method != http.MethodGet {
+		req, err = http.NewRequest(
+			method,
+			urlServer+url,
+			body,
+		)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+	} else {
+		req, err = http.NewRequest(
+			method,
+			urlServer+url,
+			nil,
+		)
+		if err != nil {
+			log.Fatalln(err)
+		}
 	}
-	req.Header.Set("Content-Type", "application/json")
-	return req
-}
-
-func deleteReq(body io.Reader) *http.Request {
-	// deleteReq - функция delete запроса на сервер
-	req, err := http.NewRequest(
-		http.MethodDelete,
-		urlServer+url,
-		body,
-	)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return req
-}
-
-func putReq(body io.Reader) *http.Request {
-	// putReq - функция put запроса на сервер
-	req, err := http.NewRequest(
-		http.MethodPut,
-		urlServer+url,
-		body,
-	)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
 	return req
 }
