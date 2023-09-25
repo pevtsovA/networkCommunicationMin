@@ -2,10 +2,14 @@ package models
 
 import (
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"math"
 	"net/http"
 )
+
+func init() {
+	log.SetFormatter(&log.JSONFormatter{})
+}
 
 func (u *User) ToSting() string {
 	// ToSting - функция преобразования вывода данных на экран
@@ -48,7 +52,7 @@ func Logger(handler http.Handler) http.Handler {
 	// Logger - функция логирования
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		if request.URL.Path != "/ping" {
-			log.Println(request.URL.Path)
+			log.Info("resource request: ", request.URL.Path)
 		}
 		handler.ServeHTTP(writer, request)
 	})

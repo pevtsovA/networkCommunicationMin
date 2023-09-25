@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
+	log "github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"net/http"
 	"networkCommunicationMin/models"
 	"time"
@@ -19,19 +19,23 @@ var (
 	ms               map[string]int
 )
 
+func init() {
+	log.SetFormatter(&log.JSONFormatter{})
+}
+
 func main() {
-	http.HandleFunc("/", HandleProxy)
-	log.Println("listening", proxyAddress)
+	http.HandleFunc("/", handleProxy)
+	log.Info("listening ", proxyAddress)
 
 	go pingServers()
 	ms = make(map[string]int)
 
 	if err := http.ListenAndServe(proxyAddress, nil); err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
 	}
 }
 
-func HandleProxy(w http.ResponseWriter, r *http.Request) {
+func handleProxy(w http.ResponseWriter, r *http.Request) {
 	// HandleProxy - функция обработки прокси
 	var req *http.Request
 	var res *http.Response
@@ -42,9 +46,13 @@ func HandleProxy(w http.ResponseWriter, r *http.Request) {
 		url = r.URL.Path
 	}
 
+	if r.URL.Path != "/ping" {
+		log.Info("resource request: ", r.URL.Path)
+	}
+
 	bodyBytes, err = io.ReadAll(r.Body)
 	if err != nil {
-		log.Fatalln(err)
+		log.Error(err)
 	}
 	defer r.Body.Close()
 	body := bytes.NewBuffer(bodyBytes)
@@ -69,11 +77,8 @@ func HandleProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		body = nil
 	}
-	/*if r.Method == "GET" {
-		req = getReq()
-	} else {*/
+
 	req = makeReq(body, r.Method)
-	//}
 
 	client := http.Client{
 		Timeout: 5 * time.Second,
@@ -82,19 +87,46 @@ func HandleProxy(w http.ResponseWriter, r *http.Request) {
 	if req != nil {
 		res, err = client.Do(req)
 		if err != nil {
-			log.Fatalln(err)
+			log.Error(err)
 		}
 		defer res.Body.Close()
 
 		bodyBytes, err = io.ReadAll(res.Body)
 		if err != nil {
-			log.Fatalln(err)
+			log.Error(err)
 		}
 
 		w.Write(bodyBytes)
 	} else {
 		w.Write([]byte("Сервер не доступен"))
 	}
+}
+
+func makeReq(body io.Reader, method string) *http.Request {
+	var req *http.Request
+	var err error
+
+	if method != http.MethodGet {
+		req, err = http.NewRequest(
+			method,
+			urlServer+url,
+			body,
+		)
+		if err != nil {
+			log.Error(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+	} else {
+		req, err = http.NewRequest(
+			method,
+			urlServer+url,
+			nil,
+		)
+		if err != nil {
+			log.Error(err)
+		}
+	}
+	return req
 }
 
 func pingServers() {
@@ -118,31 +150,4 @@ func pingServers() {
 		}
 		time.Sleep(5 * time.Second)
 	}
-}
-
-func makeReq(body io.Reader, method string) *http.Request {
-	var req *http.Request
-	var err error
-
-	if method != http.MethodGet {
-		req, err = http.NewRequest(
-			method,
-			urlServer+url,
-			body,
-		)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		req.Header.Set("Content-Type", "application/json")
-	} else {
-		req, err = http.NewRequest(
-			method,
-			urlServer+url,
-			nil,
-		)
-		if err != nil {
-			log.Fatalln(err)
-		}
-	}
-	return req
 }
