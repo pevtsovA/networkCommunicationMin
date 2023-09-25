@@ -25,7 +25,7 @@ func (s *Service) Ping(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) GetAll(w http.ResponseWriter, r *http.Request) {
 	// GetAll - функция, которая возвращает данные по всем пользователям
-	log.Println("================= GetAll ==================")
+	log.Info("================= GetAll ==================")
 	users, err := s.Storage.GetUsers()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -43,7 +43,7 @@ func (s *Service) GetAll(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) GetFriends(w http.ResponseWriter, r *http.Request) {
 	// GetFriends - функция, которая возвращает всех друзей пользователя
-	log.Println("================= GetFriends ==================")
+	log.Info("================= GetFriends ==================")
 	id := chi.URLParam(r, "id")
 	userID, _ := strconv.Atoi(id)
 	friends := []models.User{}
