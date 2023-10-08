@@ -5,7 +5,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
-	"networkCommunicationMin/models"
+	"networkCommunicationMin/secondary_function"
 	"time"
 )
 
@@ -70,7 +70,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	n, s := models.FindMinID(ms)
+	n, s := secondary_function.FindMinID(ms)
 	urlServer = s
 	ms[s] = n + 1
 
@@ -136,10 +136,10 @@ func pingServers() {
 	var indexServer int
 	for {
 		for _, val := range servers {
-			checkServer = models.CheckServer(val + "/ping")
-			isContains = models.Contains(availableServers, val)
+			checkServer = secondary_function.CheckServer(val + "/ping")
+			isContains = secondary_function.Contains(availableServers, val)
 			if isContains {
-				indexServer = models.Find(availableServers, val)
+				indexServer = secondary_function.Find(availableServers, val)
 			}
 
 			if checkServer == 200 && !isContains {

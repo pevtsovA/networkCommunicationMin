@@ -1,4 +1,4 @@
-package main
+package rest
 
 import (
 	"encoding/json"
@@ -6,7 +6,9 @@ import (
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
+	"networkCommunicationMin/contract"
 	"networkCommunicationMin/models"
+	"networkCommunicationMin/secondary_function"
 	"strconv"
 )
 
@@ -15,7 +17,11 @@ func init() {
 }
 
 type Service struct {
-	Storage Storage
+	Storage contract.Storage
+}
+
+func NewService(storage contract.Storage) Service {
+	return Service{Storage: storage}
 }
 
 func (s *Service) Ping(w http.ResponseWriter, r *http.Request) {
@@ -267,7 +273,7 @@ func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
 	for _, user := range dataUsers {
 		for _, friendID := range user.Friends {
 			if friendID == int64(userToDelete.ID) {
-				indexUserToDelete := models.FindUser(user.Friends, userToDelete)
+				indexUserToDelete := secondary_function.FindUser(user.Friends, userToDelete)
 				user.Friends = append((user.Friends)[:indexUserToDelete], (user.Friends)[indexUserToDelete+1:]...)
 				err = s.Storage.UpdateUser(user.ID, user.Name, user.Age, user.Friends)
 				if err != nil {

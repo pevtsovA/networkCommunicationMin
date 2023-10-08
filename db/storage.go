@@ -16,6 +16,20 @@ type Storage struct {
 	DB *sql.DB
 }
 
+func NewStorage(DB *sql.DB) *Storage {
+	return &Storage{DB: DB}
+}
+
+func ConnectToBD(password string) (*sql.DB, func()) {
+	connStr := fmt.Sprintf("user=postgres password=%s dbname=socnetworkdb sslmode=disable", password)
+	dbConnect, err := sql.Open("postgres", connStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return dbConnect, func() { dbConnect.Close() }
+}
+
 func (s *Storage) GetUsers() (map[int]models.User, error) {
 	// DataReading - функция получения пользователей из БД
 	rows, err := s.DB.Query("select * from users")

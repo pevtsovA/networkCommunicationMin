@@ -1,4 +1,4 @@
-package main
+package contract
 
 import (
 	"fmt"
@@ -37,7 +37,16 @@ func (m *MockStorage) GetUserById(id int) (models.User, error) {
 }
 
 func (m *MockStorage) SaveUser(name string, age int, friends []int64) (int, error) {
-	panic("implement me")
+	u := models.User{
+		ID:      1,
+		Name:    "Oleg",
+		Age:     22,
+		Friends: nil,
+	}
+	if u.Name == name && u.Age == age && friends == nil {
+		return u.ID, nil
+	}
+	return -1, nil
 }
 
 func (m *MockStorage) UpdateUser(id int, name string, age int, friends []int64) error {

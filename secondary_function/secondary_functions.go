@@ -1,22 +1,17 @@
-package models
+package secondary_function
 
 import (
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"math"
 	"net/http"
+	"networkCommunicationMin/models"
 )
 
 func init() {
 	log.SetFormatter(&log.JSONFormatter{})
 }
 
-func (u *User) ToSting() string {
-	// ToSting - функция преобразования вывода данных на экран
-	return fmt.Sprintf("name is %s, age is %d and friends are %v \n", u.Name, u.Age, u.Friends)
-}
-
-func FindUser(a []int64, x User) int {
+func FindUser(a []int64, x models.User) int {
 	// FindUser - функция нахождения индекса указанного пользователя
 	for i, n := range a {
 		if int64(x.ID) == n {
@@ -24,28 +19,6 @@ func FindUser(a []int64, x User) int {
 		}
 	}
 	return -1
-}
-
-func MaxUserID(u map[int]User) int {
-	// MaxUserID - функция нахождения максимального индекса пользователя
-	index := 0
-	for _, i := range u {
-		if index < i.ID {
-			index = i.ID
-		}
-	}
-	return index
-}
-
-func MinUserID(u map[int]User) int {
-	// MinUserID - функция нахождения минимального индекса пользователя
-	index := math.MaxInt
-	for _, i := range u {
-		if index > i.ID {
-			index = i.ID
-		}
-	}
-	return index
 }
 
 func Logger(handler http.Handler) http.Handler {

@@ -1,6 +1,8 @@
-package main
+package contract
 
-import "networkCommunicationMin/models"
+import (
+	"networkCommunicationMin/models"
+)
 
 type Storage interface {
 	GetUsers() (map[int]models.User, error)

@@ -1,15 +1,16 @@
-package main
+package rest
 
 import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"networkCommunicationMin/contract"
 	"testing"
 )
 
 func TestService_GetAll(t *testing.T) {
 	s := Service{
-		Storage: &MockStorage{},
+		Storage: &contract.MockStorage{},
 	}
 
 	w := httptest.NewRecorder()
@@ -27,7 +28,7 @@ func TestService_GetAll(t *testing.T) {
 
 func TestMockStorage_GetUserById(t *testing.T) {
 	s := Service{
-		Storage: &MockStorage{},
+		Storage: &contract.MockStorage{},
 	}
 
 	var responseString string
