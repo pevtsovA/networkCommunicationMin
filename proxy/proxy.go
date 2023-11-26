@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
@@ -9,14 +10,13 @@ import (
 	"time"
 )
 
-const proxyAddress string = "localhost:3000"
-
 var (
 	urlServer        string
 	url              string
-	servers          = []string{"http://localhost:8080", "http://localhost:8081", "http://localhost:8082", "http://localhost:8088"}
+	servers          []string
 	availableServers []string
 	ms               map[string]int
+	isDocker         *bool
 )
 
 func init() {
@@ -24,14 +24,18 @@ func init() {
 }
 
 func main() {
+	port := flag.String("port", "3000", "Listen server port")
+	isDocker = flag.Bool("runviadocker", false, "Run the application")
+	flag.Parse()
+
 	http.HandleFunc("/", handleProxy)
-	log.Info("listening ", proxyAddress)
+	log.Info("listening localhost:" + *port)
 
 	go pingServers()
 	ms = make(map[string]int)
 
-	if err := http.ListenAndServe(proxyAddress, nil); err != nil {
-		log.Fatal(err)
+	if err := http.ListenAndServe(":"+*port, nil); err != nil {
+		log.Fatalln(err)
 	}
 }
 
@@ -44,10 +48,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	if r.URL.Path != "/favicon.ico" {
 		url = r.URL.Path
-	}
-
-	if r.URL.Path != "/ping" {
-		log.Info("resource request: ", r.URL.Path)
+		log.Info("resource request: ", url)
 	}
 
 	bodyBytes, err = io.ReadAll(r.Body)
@@ -89,14 +90,17 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Error(err)
 		}
-		defer res.Body.Close()
 
-		bodyBytes, err = io.ReadAll(res.Body)
-		if err != nil {
-			log.Error(err)
+		if res != nil && res.Body != nil {
+			defer res.Body.Close()
+
+			bodyBytes, err = io.ReadAll(res.Body)
+			if err != nil {
+				log.Error(err)
+			}
+
+			w.Write(bodyBytes)
 		}
-
-		w.Write(bodyBytes)
 	} else {
 		w.Write([]byte("Сервер не доступен"))
 	}
@@ -134,10 +138,18 @@ func pingServers() {
 	var checkServer int
 	var isContains bool
 	var indexServer int
+
+	if *isDocker {
+		servers = []string{"http://172.19.0.1:8080", "http://172.19.0.1:8081", "http://172.19.0.1:8082", "http://172.19.0.1:8088"}
+	} else {
+		servers = []string{"http://localhost:8080", "http://localhost:8081", "http://localhost:8082", "http://localhost:8088"}
+	}
+
 	for {
 		for _, val := range servers {
 			checkServer = secondary_function.CheckServer(val + "/ping")
 			isContains = secondary_function.Contains(availableServers, val)
+
 			if isContains {
 				indexServer = secondary_function.Find(availableServers, val)
 			}

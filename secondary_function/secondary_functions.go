@@ -38,10 +38,6 @@ func CheckServer(url string) (result int) {
 		return -1
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return resp.StatusCode
-	}
 	return resp.StatusCode
 }
 

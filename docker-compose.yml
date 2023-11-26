@@ -1,0 +1,66 @@
+version: "3.8"
+services:
+  app:
+    build: ./
+    image: soc_network-1
+    container_name: soc_network.8080
+    ports:
+      - "8080:8080"
+    networks:
+      my-net:
+        ipv4_address: 172.19.0.2
+    volumes:
+      - .:/usr/local/src
+    command: /server --port 8080 --dbpassword my_postgre --runviadocker true
+
+  app-2:
+    build: ./
+    image: soc_network-2
+    container_name: soc_network.8088
+    ports:
+      - "8088:8088"
+    networks:
+      my-net:
+        ipv4_address: 172.19.0.3
+    volumes:
+      - .:/usr/local/src
+    command: /server --port 8088 --dbpassword my_postgre --runviadocker true
+
+  proxy:
+    build: ./
+    image: proxy
+    container_name: proxy.3000
+    ports:
+      - "3000:3000"
+    networks:
+      my-net:
+        ipv4_address: 172.19.0.5
+    volumes:
+      - .:/usr/local/src
+    command: /proxy --port 3000 --runviadocker true
+
+  db:
+    image: postgres:alpine
+    ports:
+      - "5432:5432"
+    networks:
+      my-net:
+        ipv4_address: 172.19.0.9
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: my_postgre
+      POSTGRES_DB: socnetworkdb
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres-db:/var/lib/postgresql/data
+
+volumes:
+  postgres-db:
+
+networks:
+  my-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
+          gateway: 172.19.0.1

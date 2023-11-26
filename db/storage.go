@@ -20,13 +20,18 @@ func NewStorage(DB *sql.DB) *Storage {
 	return &Storage{DB: DB}
 }
 
-func ConnectToBD(password string) (*sql.DB, func()) {
-	connStr := fmt.Sprintf("user=postgres password=%s dbname=socnetworkdb sslmode=disable", password)
+func ConnectToBD(password string, isDocker bool) (*sql.DB, func()) {
+	var connStr string
+	if isDocker {
+		connStr = fmt.Sprintf("host=db user=postgres password=%s dbname=socnetworkdb port=5432 sslmode=disable TimeZone=Europe/Moscow", password)
+	} else {
+		connStr = fmt.Sprintf("user=postgres password=%s dbname=socnetworkdb sslmode=disable", password)
+	}
+
 	dbConnect, err := sql.Open("postgres", connStr)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	return dbConnect, func() { dbConnect.Close() }
 }
 
