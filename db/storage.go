@@ -57,9 +57,8 @@ func (s *Storage) GetUsers() (map[int]models.User, error) {
 
 func (s *Storage) GetUserById(id int) (models.User, error) {
 	// DataReading - функция получения пользователя по конкретному id из БД
-	row := s.DB.QueryRow("select * from users t where id = $1", id)
 	u := models.User{}
-	err := row.Scan(&u.ID, &u.Name, &u.Age, pq.Array(&u.Friends))
+	err := s.DB.QueryRow("select * from users t where id = $1", id).Scan(&u.ID, &u.Name, &u.Age, pq.Array(&u.Friends))
 	if err != nil {
 		return models.User{}, fmt.Errorf("method 'GetUserById' Cause: %v", err)
 	}
