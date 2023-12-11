@@ -21,6 +21,7 @@ func NewStorage(DB *sql.DB) *Storage {
 }
 
 func ConnectToBD(password string, isDocker bool) (*sql.DB, func()) {
+	// ConnectToBD - функция подключения к БД
 	var connStr string
 	if isDocker {
 		connStr = fmt.Sprintf("host=db user=postgres password=%s dbname=socnetworkdb port=5432 sslmode=disable TimeZone=Europe/Moscow", password)
