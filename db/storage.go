@@ -37,7 +37,7 @@ func ConnectToBD(password string, isDocker bool) (*sql.DB, func()) {
 
 func (s *Storage) GetUsers() (map[int]models.User, error) {
 	// DataReading - функция получения пользователей из БД
-	rows, err := s.DB.Query("select * from users")
+	rows, err := s.DB.Query("select t.id, t.name, t.age, t.friends from users t")
 	if err != nil {
 		return nil, fmt.Errorf("method 'GetUsers' Cause: %v", err)
 	}
@@ -58,7 +58,7 @@ func (s *Storage) GetUsers() (map[int]models.User, error) {
 func (s *Storage) GetUserById(id int) (models.User, error) {
 	// DataReading - функция получения пользователя по конкретному id из БД
 	u := models.User{}
-	err := s.DB.QueryRow("select * from users t where id = $1", id).Scan(&u.ID, &u.Name, &u.Age, pq.Array(&u.Friends))
+	err := s.DB.QueryRow("select t.id, t.name, t.age, t.friends from users t where id = $1", id).Scan(&u.ID, &u.Name, &u.Age, pq.Array(&u.Friends))
 	if err != nil {
 		return models.User{}, fmt.Errorf("method 'GetUserById' Cause: %v", err)
 	}
