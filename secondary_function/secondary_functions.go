@@ -1,10 +1,12 @@
 package secondary_function
 
 import (
-	log "github.com/sirupsen/logrus"
 	"math"
 	"net/http"
+	"net/url"
 	"networkCommunicationMin/models"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func init() {
@@ -72,4 +74,17 @@ func FindMinID(m map[string]int) (int, string) {
 		}
 	}
 	return value, key
+}
+
+func GetURL(path, endpoint string) string {
+	base, err := url.Parse(path)
+	if err != nil {
+		log.Error("parse url: ", err)
+	}
+	base.Path, err = url.JoinPath(base.Path, endpoint)
+	if err != nil {
+		log.Error("join path url: ", err)
+	}
+
+	return base.String()
 }

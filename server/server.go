@@ -2,10 +2,11 @@ package main
 
 import (
 	"flag"
-	log "github.com/sirupsen/logrus"
 	"net/http"
 	"networkCommunicationMin/api"
 	"networkCommunicationMin/db"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func init() {
@@ -23,7 +24,7 @@ func main() {
 
 	r := api.RegisterAPI(dbConnect)
 
-	log.Info("listening localhost:" + *port)
+	log.Info("listening localhost:", *port)
 	if err := http.ListenAndServe(":"+*port, r); err != nil {
 		log.Fatalln(err)
 	}

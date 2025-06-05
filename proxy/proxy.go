@@ -2,17 +2,22 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
-	"networkCommunicationMin/secondary_function"
+	"networkCommunicationMin/rest"
+	secondary "networkCommunicationMin/secondary_function"
+	"slices"
 	"time"
+
+	"github.com/go-chi/render"
+	log "github.com/sirupsen/logrus"
 )
 
 var (
 	urlServer        string
-	url              string
+	endpoint         string
 	servers          []string
 	availableServers []string
 	ms               map[string]int
@@ -29,7 +34,7 @@ func main() {
 	flag.Parse()
 
 	http.HandleFunc("/", handleProxy)
-	log.Info("listening localhost:" + *port)
+	log.Info("listening localhost:", *port)
 
 	go pingServers()
 	ms = make(map[string]int)
@@ -47,13 +52,13 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	var bodyBytes []byte
 
 	if r.URL.Path != "/favicon.ico" {
-		url = r.URL.Path
-		log.Info("resource request: ", url)
+		endpoint = r.URL.Path
+		log.Info("resource request: ", endpoint)
 	}
 
 	bodyBytes, err = io.ReadAll(r.Body)
 	if err != nil {
-		log.Error(err)
+		log.Error("handleProxy: read body: ", err)
 	}
 	defer r.Body.Close()
 	body := bytes.NewBuffer(bodyBytes)
@@ -64,14 +69,13 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if len(ms) < len(availableServers) {
 		for _, val := range availableServers {
-			_, ok := ms[val]
-			if ok != true {
+			if _, ok := ms[val]; !ok {
 				ms[val] = 0
 			}
 		}
 	}
 
-	n, s := secondary_function.FindMinID(ms)
+	n, s := secondary.FindMinID(ms)
 	urlServer = s
 	ms[s] = n + 1
 
@@ -88,46 +92,52 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	if req != nil {
 		res, err = client.Do(req)
 		if err != nil {
-			log.Error(err)
+			log.Error("handleProxy: client do req: ", err)
 		}
 
 		if res != nil && res.Body != nil {
 			defer res.Body.Close()
 
-			bodyBytes, err = io.ReadAll(res.Body)
-			if err != nil {
-				log.Error(err)
+			var response rest.ResponsePayload
+			if err = json.NewDecoder(res.Body).Decode(&response); err != nil {
+				log.Error("handleProxy: response decode: ", err)
 			}
 
-			w.Write(bodyBytes)
+			if response.Errors != nil {
+				render.Status(r, http.StatusBadRequest)
+			}
+			_ = render.Render(w, r, &rest.ResponsePayload{Result: response.Result, Errors: response.Errors})
 		}
 	} else {
-		w.Write([]byte("Сервер не доступен"))
+		render.Status(r, http.StatusServiceUnavailable)
+		_ = render.Render(w, r, &rest.ResponsePayload{Errors: []string{"Сервер не доступен"}})
 	}
 }
 
 func makeReq(body io.Reader, method string) *http.Request {
+	// makeReq - функция создания запроса
 	var req *http.Request
 	var err error
 
+	urlSrv := secondary.GetURL(urlServer, endpoint)
 	if method != http.MethodGet {
 		req, err = http.NewRequest(
 			method,
-			urlServer+url,
+			urlSrv,
 			body,
 		)
 		if err != nil {
-			log.Error(err)
+			log.Error("makeReq: new request: ", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
 	} else {
 		req, err = http.NewRequest(
 			method,
-			urlServer+url,
+			urlSrv,
 			nil,
 		)
 		if err != nil {
-			log.Error(err)
+			log.Error("makeReq: new request: ", err)
 		}
 	}
 	return req
@@ -147,17 +157,18 @@ func pingServers() {
 
 	for {
 		for _, val := range servers {
-			checkServer = secondary_function.CheckServer(val + "/ping")
-			isContains = secondary_function.Contains(availableServers, val)
+			urlSrv := secondary.GetURL(val, "ping")
+			checkServer = secondary.CheckServer(urlSrv)
+			isContains = secondary.Contains(availableServers, val)
 
 			if isContains {
-				indexServer = secondary_function.Find(availableServers, val)
+				indexServer = secondary.Find(availableServers, val)
 			}
 
 			if checkServer == 200 && !isContains {
 				availableServers = append(availableServers, val)
 			} else if checkServer != 200 && isContains {
-				availableServers = append((availableServers)[:indexServer], (availableServers)[indexServer+1:]...)
+				availableServers = slices.Delete(availableServers, indexServer, indexServer+1)
 			}
 		}
 		time.Sleep(5 * time.Second)

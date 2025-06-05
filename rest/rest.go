@@ -1,15 +1,22 @@
+//go:generate mockgen -source=rest.go -destination=../mocks/storage.go -package=mocks
+
 package rest
 
 import (
 	"encoding/json"
-	"github.com/go-chi/chi/v5"
-	log "github.com/sirupsen/logrus"
+	"fmt"
 	"io"
 	"net/http"
-	"networkCommunicationMin/contract"
 	"networkCommunicationMin/models"
-	"networkCommunicationMin/secondary_function"
+	secondary "networkCommunicationMin/secondary_function"
+	"slices"
+	"sort"
 	"strconv"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/render"
+	log "github.com/sirupsen/logrus"
 )
 
 func init() {
@@ -17,139 +24,181 @@ func init() {
 }
 
 type Service struct {
-	Storage contract.Storage
+	Storage Storage
 }
 
-func NewService(storage contract.Storage) Service {
-	return Service{Storage: storage}
+type Storage interface {
+	GetUsers() (map[int]models.User, error)
+	GetUserById(id int) (models.User, error)
+	SaveUser(name string, age int, friends []int64) (int, error)
+	UpdateUser(id int, name string, age int, friends []int64) error
+	DeleteUser(id int) error
+}
+
+func NewService(storage Storage) *Service {
+	return &Service{Storage: storage}
 }
 
 func (s *Service) Ping(w http.ResponseWriter, r *http.Request) {
-	// Ping - функция проверки соединения с сервером
-	w.WriteHeader(http.StatusOK)
+	// Ping - метод проверки соединения с сервером
+	render.Status(r, http.StatusOK)
+	_ = render.Render(w, r, &ResponsePayload{Result: "ping successful"})
 }
 
 func (s *Service) GetAll(w http.ResponseWriter, r *http.Request) {
-	// GetAll - функция, которая возвращает данные по всем пользователям
-	log.Info("================= GetAll ==================")
-	users, err := s.Storage.GetUsers()
+	// GetAll - метод, которая возвращает данные по всем пользователям
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+		}
+	}()
+
+	usersStor, err := s.Storage.GetUsers()
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to get users"))
-		log.Error("method 'GetAll', ", err)
+		err = fmt.Errorf("GetAll: get users: %w", err)
+		render.Status(r, http.StatusInternalServerError)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
-	response := ""
-	for _, user := range users {
-		response += user.ToSting()
+
+	var keys []int
+	for u := range usersStor {
+		keys = append(keys, u)
 	}
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(response))
+	sort.Ints(keys)
+
+	var users []string
+	for _, k := range keys {
+		user := usersStor[k]
+		users = append(users, user.ToSting())
+	}
+
+	_ = render.Render(w, r, &ResponsePayload{Result: users})
 }
 
 func (s *Service) GetFriends(w http.ResponseWriter, r *http.Request) {
-	// GetFriends - функция, которая возвращает всех друзей пользователя
-	log.Info("================= GetFriends ==================")
+	// GetFriends - метод, которая возвращает всех друзей пользователя
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+		}
+	}()
+
 	id := chi.URLParam(r, "id")
-	userID, _ := strconv.Atoi(id)
+	userID, err := strconv.Atoi(id)
+	if err != nil {
+		err = fmt.Errorf("invalid url id parameter, must be a number")
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
+		return
+	}
 	friends := []models.User{}
 
 	user, err := s.Storage.GetUserById(userID)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("User does not exist"))
-		log.Error("method 'GetFriends', ", err)
+		err = fmt.Errorf("GetFriends: get user: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
-	log.Info("User received: ", user)
 
 	friendsList := user.Friends
-	for i := 0; i < len(friendsList); i++ {
-		f, err := s.Storage.GetUserById(int(friendsList[i]))
+	for _, idFriends := range friendsList {
+		f, err := s.Storage.GetUserById(int(idFriends))
 		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("User friends does not exist"))
-			log.Error("method 'GetFriends', ", err)
+			err = fmt.Errorf("GetFriends: get friend: %w", err)
+			render.Status(r, http.StatusBadRequest)
+			_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
+			return
 		} else {
 			friends = append(friends, f)
 		}
 	}
 
-	body, _ := json.Marshal(friends)
-	w.WriteHeader(http.StatusOK)
-	w.Write(body)
+	_ = render.Render(w, r, &ResponsePayload{Result: friends})
 }
 
 func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
-	// Create - функция, которая создаёт нового пользователя
-	log.Info("================= Create ==================")
+	// Create - метод, которая создаёт нового пользователя
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+		}
+	}()
+
 	content, err := io.ReadAll(r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to retrieve data"))
-		log.Error("method 'Create', ", err)
+		err = fmt.Errorf("Create: read content: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
 	defer r.Body.Close()
 
 	var u models.User
 	if err = json.Unmarshal(content, &u); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to retrieve data"))
-		log.Error("method 'Create', ", err)
+		err = fmt.Errorf("Create: unmarshal content: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
 
 	id, err := s.Storage.SaveUser(u.Name, u.Age, u.Friends)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to save user"))
-		log.Error("method 'Create', ", err)
+		err = fmt.Errorf("Create: save user in db: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte("User created with id: " + strconv.Itoa(id)))
-	log.Info("user created with id: " + strconv.Itoa(id))
+	render.Status(r, http.StatusCreated)
+	_ = render.Render(w, r, &ResponsePayload{Result: "user created with id: " + strconv.Itoa(id)})
 }
 
 func (s *Service) MakeFriends(w http.ResponseWriter, r *http.Request) {
-	// MakeFriends - функция, которая делает друзей из двух пользователей
-	log.Info("=============== MakeFriends ===============")
+	// MakeFriends - метод, которая делает друзей из двух пользователей
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+		}
+	}()
+
 	content, err := io.ReadAll(r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to retrieve data"))
-		log.Error("method 'MakeFriends', ", err)
+		err = fmt.Errorf("MakeFriends: read content: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
 	defer r.Body.Close()
 
 	var f models.Friends
 	if err = json.Unmarshal(content, &f); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to retrieve data"))
-		log.Error("method 'MakeFriends', ", err)
+		err = fmt.Errorf("MakeFriends: unmarshal content: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
 
 	sourceUser, err := s.Storage.GetUserById(f.SourceId)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Source user does not exist"))
-		log.Error("method 'MakeFriends', ", err)
+		err = fmt.Errorf("MakeFriends: get source user: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
-	log.Info("source user received: ", sourceUser)
 
 	targetUser, err := s.Storage.GetUserById(f.TargetId)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Target user does not exist"))
-		log.Error("method 'MakeFriends', ", err)
+		err = fmt.Errorf("MakeFriends: get target user: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
-	log.Info("target user received: ", targetUser)
 
 	var checkFriend = false
 	for _, idFriend := range sourceUser.Friends {
@@ -158,143 +207,141 @@ func (s *Service) MakeFriends(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if checkFriend == false {
+	if !checkFriend {
 		sourceUser.Friends = append(sourceUser.Friends, int64(targetUser.ID))
-		err = s.Storage.UpdateUser(sourceUser.ID, sourceUser.Name, sourceUser.Age, sourceUser.Friends)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Failed to update source user"))
-			log.Error("method 'MakeFriends', ", err)
+		if err = s.Storage.UpdateUser(sourceUser.ID, sourceUser.Name, sourceUser.Age, sourceUser.Friends); err != nil {
+			err = fmt.Errorf("MakeFriends: update source user: %w", err)
+			render.Status(r, http.StatusInternalServerError)
+			_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 			return
 		}
 
 		targetUser.Friends = append(targetUser.Friends, int64(sourceUser.ID))
-		err = s.Storage.UpdateUser(targetUser.ID, targetUser.Name, targetUser.Age, targetUser.Friends)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte("Failed to update target user"))
-			log.Error("method 'MakeFriends', ", err)
+		if err = s.Storage.UpdateUser(targetUser.ID, targetUser.Name, targetUser.Age, targetUser.Friends); err != nil {
+			err = fmt.Errorf("MakeFriends: update target user: %w", err)
+			render.Status(r, http.StatusInternalServerError)
+			_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 			return
 		}
 
-		w.Write([]byte(sourceUser.Name + " and " + targetUser.Name + " are now friends"))
-		log.Info(sourceUser.Name + " and " + targetUser.Name + " are now friends")
+		res := []string{sourceUser.Name, "and", targetUser.Name, "are now friends"}
+		_ = render.Render(w, r, &ResponsePayload{Result: strings.Join(res, " ")})
 	} else {
-		w.Write([]byte(sourceUser.Name + " and " + targetUser.Name + " are already friends"))
-		log.Warning(sourceUser.Name + " and " + targetUser.Name + " are already friends")
+		res := []string{sourceUser.Name, "and", targetUser.Name, "are already friends"}
+		_ = render.Render(w, r, &ResponsePayload{Result: strings.Join(res, " ")})
 	}
 }
 
 func (s *Service) UpdateUserAge(w http.ResponseWriter, r *http.Request) {
-	// UpdateUser - функция, которая обновляет данные пользователя
-	log.Info("============== UpdateUserAge ==============")
+	// UpdateUser - метод, которая обновляет данные пользователя
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+		}
+	}()
+
 	content, err := io.ReadAll(r.Body)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to retrieve data"))
-		log.Error("method 'UpdateUserAge', ", err)
+		err = fmt.Errorf("UpdateUserAge: read content: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
 	defer r.Body.Close()
 
 	var c models.ChangeAge
 	if err = json.Unmarshal(content, &c); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to retrieve data"))
-		log.Error("method 'UpdateUserAge', ", err)
+		err = fmt.Errorf("UpdateUserAge: unmarshal content: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
 
 	id := chi.URLParam(r, "id")
-	userID, _ := strconv.Atoi(id)
+	userID, err := strconv.Atoi(id)
+	if err != nil {
+		err = fmt.Errorf("invalid url id parameter, must be a number")
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
+		return
+	}
 
 	user, err := s.Storage.GetUserById(userID)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("User does not exist"))
-		log.Error("method 'UpdateUserAge', ", err)
-		return
-	}
-	log.Info("user received:", user)
-
-	err = s.Storage.UpdateUser(user.ID, user.Name, c.NewAge, user.Friends)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to update user"))
-		log.Error("method 'UpdateUserAge', ", err)
+		err = fmt.Errorf("UpdateUserAge: get user: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("User age updated successfully"))
-	log.Info("user age updated successfully")
+	if err = s.Storage.UpdateUser(user.ID, user.Name, c.NewAge, user.Friends); err != nil {
+		err = fmt.Errorf("UpdateUserAge: update user: %w", err)
+		render.Status(r, http.StatusInternalServerError)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
+		return
+	}
+
+	_ = render.Render(w, r, &ResponsePayload{Result: "user age updated successfully"})
 }
 
 func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
-	// Delete - функция, которая принимает ID пользователя и удаляет его из хранилища,
+	// Delete - метод, которая принимает ID пользователя и удаляет его из хранилища,
 	// а также стирает его из массива friends у всех его друзей.
-	log.Info("================= DELETE ==================")
-	content, err := io.ReadAll(r.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to retrieve data"))
-		log.Error("method 'Delete', ", err)
-		return
-	}
-	defer r.Body.Close()
+	var err error
+	defer func() {
+		if err != nil {
+			log.Error(err)
+		}
+	}()
 
-	var f models.Friends
-	if err = json.Unmarshal(content, &f); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Failed to retrieve data"))
-		log.Error("method 'Delete', ", err)
-		return
-	}
-	uID := f.TargetId
-
-	userToDelete, err := s.Storage.GetUserById(uID)
+	id := chi.URLParam(r, "id")
+	userID, err := strconv.Atoi(id)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("User does not exist"))
-		log.Error("method 'Delete', ", err)
+		err = fmt.Errorf("invalid url id parameter, must be a number")
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
-	log.Info("user received for delete:", userToDelete)
-	remoteUsername := userToDelete.Name
+
+	userToDelete, err := s.Storage.GetUserById(userID)
+	if err != nil {
+		err = fmt.Errorf("Delete: get user: %w", err)
+		render.Status(r, http.StatusBadRequest)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
+		return
+	}
 
 	dataUsers, err := s.Storage.GetUsers()
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to get users"))
-		log.Error("method 'Delete', ", err)
+		err = fmt.Errorf("Delete: get users data: %w", err)
+		render.Status(r, http.StatusInternalServerError)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
 
 	for _, user := range dataUsers {
 		for _, friendID := range user.Friends {
 			if friendID == int64(userToDelete.ID) {
-				indexUserToDelete := secondary_function.FindUser(user.Friends, userToDelete)
-				user.Friends = append((user.Friends)[:indexUserToDelete], (user.Friends)[indexUserToDelete+1:]...)
-				err = s.Storage.UpdateUser(user.ID, user.Name, user.Age, user.Friends)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					w.Write([]byte("Failed to update user"))
-					log.Error("method 'Delete', ", err)
+				indexUserToDelete := secondary.FindUser(user.Friends, userToDelete)
+				user.Friends = slices.Delete(user.Friends, indexUserToDelete, indexUserToDelete+1)
+				if err = s.Storage.UpdateUser(user.ID, user.Name, user.Age, user.Friends); err != nil {
+					err = fmt.Errorf("Delete: update user: %w", err)
+					render.Status(r, http.StatusInternalServerError)
+					_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 					return
 				}
 			}
 		}
 	}
 
-	err = s.Storage.DeleteUser(uID)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Failed to delete user"))
-		log.Error("method 'Delete', ", err)
+	if err = s.Storage.DeleteUser(userID); err != nil {
+		err = fmt.Errorf("Delete: delete user: %w", err)
+		render.Status(r, http.StatusInternalServerError)
+		_ = render.Render(w, r, &ResponsePayload{Errors: []string{err.Error()}})
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("remote username: " + remoteUsername))
-	log.Info("remote username:", remoteUsername)
+	res := []string{"user", userToDelete.Name, "successfully deleted"}
+	_ = render.Render(w, r, &ResponsePayload{Result: strings.Join(res, " ")})
 }

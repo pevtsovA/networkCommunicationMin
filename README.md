@@ -23,20 +23,19 @@
 
 
 # Запуск приложения
-- запуск реплики приложения: cd server; go build -o server.exe; ./server.exe --port 8080 --dbpassword ********
+- запуск реплики приложения: make build-server; ./bin/server.exe --port 8080 --dbpassword ********
   
     (доступно 4 порта для сервиса: 8080,8081,8082,8088)
 
 
-- запуск proxy: cd proxy; go build -o proxy.exe; ./proxy.exe --port 3000
+- запуск proxy: make build-proxy; ./bin/proxy.exe --port 3000
 
 
 # Примеры запросов через curl:
 
 - Добавить пользователя: curl -X POST -d "{\"name\": \"Igor\", \"age\": 20, \"friends\": []}" -H "Content-Type: application/json" http://localhost:3000/create
 - Подружить 2-х пользователей: curl -X POST -d "{\"source_id\": 1, \"target_id\": 2}" -H "Content-Type: application/json" http://localhost:3000/make_friends
-- Удалить пользователя: curl -X DELETE -d "{\"target_id\": 1}" -H "Content-Type: application/json" http://localhost:3000/user
+- Удалить пользователя: curl -X DELETE http://localhost:3000/user/1
 - Посмотреть друзей у пользователя: curl -X GET http://localhost:3000/friends/1
-- Изменить возраст пользователя: curl -X PUT -d "{\"new_age\": 28}" -H "Content-Type: application/json" http://localhost:3000/user_id/1
+- Изменить возраст пользователя: curl -X PUT -d "{\"new_age\": 28}" -H "Content-Type: application/json" http://localhost:3000/user/1
 - Посмотреть информацию по всем пользователям: curl -X GET http://localhost:3000/get_all
-

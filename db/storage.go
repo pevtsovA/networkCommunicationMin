@@ -3,9 +3,10 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"networkCommunicationMin/models"
+
 	"github.com/lib/pq"
 	log "github.com/sirupsen/logrus"
-	"networkCommunicationMin/models"
 )
 
 func init() {
@@ -37,19 +38,18 @@ func ConnectToBD(password string, isDocker bool) (*sql.DB, func()) {
 }
 
 func (s *Storage) GetUsers() (map[int]models.User, error) {
-	// DataReading - функция получения пользователей из БД
+	// DataReading - метод получения пользователей из БД
 	rows, err := s.DB.Query("select t.id, t.name, t.age, t.friends from users t")
 	if err != nil {
-		return nil, fmt.Errorf("method 'GetUsers' Cause: %v", err)
+		return nil, fmt.Errorf("method 'GetUsers' Cause: %w", err)
 	}
 	defer rows.Close()
 
 	store := make(map[int]models.User)
 	for rows.Next() {
 		var u models.User
-		err = rows.Scan(&u.ID, &u.Name, &u.Age, pq.Array(&u.Friends))
-		if err != nil {
-			return nil, fmt.Errorf("method 'GetUsers' Cause: %v", err)
+		if err = rows.Scan(&u.ID, &u.Name, &u.Age, pq.Array(&u.Friends)); err != nil {
+			return nil, fmt.Errorf("method 'GetUsers' Cause: %w", err)
 		}
 		store[u.ID] = u
 	}
@@ -57,39 +57,38 @@ func (s *Storage) GetUsers() (map[int]models.User, error) {
 }
 
 func (s *Storage) GetUserById(id int) (models.User, error) {
-	// DataReading - функция получения пользователя по конкретному id из БД
+	// DataReading - метод получения пользователя по конкретному id из БД
 	u := models.User{}
-	err := s.DB.QueryRow("select t.id, t.name, t.age, t.friends from users t where id = $1", id).Scan(&u.ID, &u.Name, &u.Age, pq.Array(&u.Friends))
-	if err != nil {
-		return models.User{}, fmt.Errorf("method 'GetUserById' Cause: %v", err)
+	sql := "select t.id, t.name, t.age, t.friends from users t where id = $1"
+	if err := s.DB.QueryRow(sql, id).Scan(&u.ID, &u.Name, &u.Age, pq.Array(&u.Friends)); err != nil {
+		return models.User{}, fmt.Errorf("method 'GetUserById' Cause: %w", err)
 	}
 	return u, nil
 }
 
 func (s *Storage) SaveUser(name string, age int, friends []int64) (int, error) {
-	// DataRecording - функция записи пользователя в БД
+	// DataRecording - метод записи пользователя в БД
 	var id int
-	err := s.DB.QueryRow("insert into users (name, age, friends) values ($1, $2, $3) returning id", name, age, pq.Array(friends)).Scan(&id)
-	if err != nil {
-		return -1, fmt.Errorf("method 'SaveUser' Cause: %v", err)
+	sql := "insert into users (name, age, friends) values ($1, $2, $3) returning id"
+	if err := s.DB.QueryRow(sql, name, age, pq.Array(friends)).Scan(&id); err != nil {
+		return -1, fmt.Errorf("method 'SaveUser' Cause: %w", err)
 	}
 	return id, nil
 }
 
 func (s *Storage) UpdateUser(id int, name string, age int, friends []int64) error {
-	// DataUpdating - функция обновления пользователя в БД
-	_, err := s.DB.Exec("update users set name = $1, age = $2, friends = $3 where id = $4", name, age, pq.Array(friends), id)
-	if err != nil {
-		return fmt.Errorf("method 'UpdateUser' Cause: %v", err)
+	// DataUpdating - метод обновления пользователя в БД
+	sql := "update users set name = $1, age = $2, friends = $3 where id = $4"
+	if _, err := s.DB.Exec(sql, name, age, pq.Array(friends), id); err != nil {
+		return fmt.Errorf("method 'UpdateUser' Cause: %w", err)
 	}
 	return nil
 }
 
 func (s *Storage) DeleteUser(id int) error {
-	// DataDeleting - функция удаления пользователя в БД
-	_, err := s.DB.Exec("delete from users where id = $1", id)
-	if err != nil {
-		return fmt.Errorf("method 'DeleteUser' Cause: %v", err)
+	// DataDeleting - метод удаления пользователя в БД
+	if _, err := s.DB.Exec("delete from users where id = $1", id); err != nil {
+		return fmt.Errorf("method 'DeleteUser' Cause: %w", err)
 	}
 	return nil
 }
