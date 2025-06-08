@@ -34,13 +34,13 @@ func main() {
 	flag.Parse()
 
 	http.HandleFunc("/", handleProxy)
-	log.Info("listening localhost:", *port)
+	log.Info("listening localhost: ", *port)
 
 	go pingServers()
 	ms = make(map[string]int)
 
 	if err := http.ListenAndServe(":"+*port, nil); err != nil {
-		log.Fatalln(err)
+		log.Fatalln("listenAndServe proxy: ", err)
 	}
 }
 
@@ -165,9 +165,9 @@ func pingServers() {
 				indexServer = secondary.Find(availableServers, val)
 			}
 
-			if checkServer == 200 && !isContains {
+			if checkServer == http.StatusOK && !isContains {
 				availableServers = append(availableServers, val)
-			} else if checkServer != 200 && isContains {
+			} else if checkServer != http.StatusOK && isContains {
 				availableServers = slices.Delete(availableServers, indexServer, indexServer+1)
 			}
 		}

@@ -24,8 +24,8 @@ func main() {
 
 	r := api.RegisterAPI(dbConnect)
 
-	log.Info("listening localhost:", *port)
+	log.Info("listening localhost: ", *port)
 	if err := http.ListenAndServe(":"+*port, r); err != nil {
-		log.Fatalln(err)
+		log.Fatalln("listenAndServe server: ", err)
 	}
 }

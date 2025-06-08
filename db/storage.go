@@ -32,8 +32,14 @@ func ConnectToBD(password string, isDocker bool) (*sql.DB, func()) {
 
 	dbConnect, err := sql.Open("postgres", connStr)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("database connect: ", err)
 	}
+
+	if err = dbConnect.Ping(); err != nil {
+		log.Fatalln("connect to the database: ", err)
+	}
+	log.Info("database connection: established")
+
 	return dbConnect, func() { dbConnect.Close() }
 }
 
